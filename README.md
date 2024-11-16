@@ -7,3 +7,7 @@ This project investigates the role of senescent Tom+ cells in liver pathology, f
 - Omori, S., Wang, T. W., Johmura, Y., et al. (2020). Generation of a p16 reporter mouse and its use to characterize and target p16high cells in vivo. Cell Metabolism, 32(6), 814-828. https://doi.org/10.1016/j.cmet.2020.09.006
   
 - Zheng, L., Liu, W., Zhang, M., et al. (2023). UCE embeddings: A novel method for robust feature extraction in single-cell transcriptomics. bioRxiv. https://doi.org/10.1101/2023.11.28.568918
+
+**Prepared by**:
+
+Nilay Bhatt (nilay.bhatt@yale.edu) and Joash Chu (joash.chu@yale.edu)
