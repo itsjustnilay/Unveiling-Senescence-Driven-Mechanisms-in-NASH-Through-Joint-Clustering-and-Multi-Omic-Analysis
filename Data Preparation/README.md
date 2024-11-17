@@ -1,10 +1,8 @@
 # Data Preparation & Joint Clustering
 
 ### Study Goals:
-1. **Joint Clustering of Normal Liver + NASH Liver**:
-- Capture the broader changes in the liver microenvironment driven by NASH, including shifts in cell composition and intercellular communication.
-2. **Joint Clustering of Normal Tom+ + NASH Tom+**:
-- Focus on senescent (Tom+) cells to identify condition-specific transcriptional changes, pathways, and their role in NASH progression.
+1. **Joint Clustering of Normal Liver + NASH Liver**: Capture the broader changes in the liver microenvironment driven by NASH, including shifts in cell composition and intercellular communication.
+2. **Joint Clustering of Normal Tom+ + NASH Tom+**: Focus on senescent (Tom+) cells to identify condition-specific transcriptional changes, pathways, and their role in NASH progression.
 
 The data for this project is sourced from the Gene Expression Omnibus (GEO) under accession number [GSE155182](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE155182). The raw sequencing files are associated with the four samples.
 
