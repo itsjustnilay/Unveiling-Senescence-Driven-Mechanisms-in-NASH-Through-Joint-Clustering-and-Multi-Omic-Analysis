@@ -30,41 +30,49 @@ The raw sequencing data is downloaded from NCBI's Short Read Archive (SRA) using
 prefetch -O sra/ SRR7073158
 
 # Example command to convert SRA to FASTQ
-fastq-dump --outdir fastq_raw --gzip --skip-technical --readids --read-filter pass --dumpbase --split-3 --clip sra/SRR7073158/SRR7073158.sra
+fastq-dump --outdir fastq_raw --gzip  --split-files sra/SRR7073158/SRR7073158.sra
 ```
+### 2. Renaming and Organizing Files
 
-### 2. Quality Control and Adapter Trimming
-The `fastp` tool is used for quality control and trimming of raw reads. It detects adapters, trims low-quality bases, and corrects read errors. The trimmed output and quality control reports are saved in the `fastq_trimmed/` and `qc_report/` directories, respectively.
+As the FASTQ files are generated from each SRA accession ID, they are renamed to ensure consistency and compatibility with CellRanger. The renaming follows a specific format and increments a sample index for each file pair:
 
 ```bash
-# Example command for trimming with fastp
-fastp --detect_adapter_for_pe --overrepresentation_analysis --correction --cut_right \
---html qc_report/SRR7073158.fastp.html --json qc_report/SRR7073158.fastp.json \
--i fastq_raw/SRR7073158_pass_1.fastq.gz -I fastq_raw/SRR7073158_pass_2.fastq.gz \
--o fastq_trimmed/SRR7073158_1.fastq.gz -O fastq_trimmed/SRR7073158_2.fastq.gz \
-2> fastq_trimmed/SRR7073158.fastp.log
+# Renaming FASTQ files within the script
+mv ${FASTQ_DIR}/${SRA_ID}_1.fastq.gz ${FASTQ_DIR}/${CELLRANGER_PREFIX}_S${SAMPLE_INDEX}_L001_R1_001.fastq.gz
+mv ${FASTQ_DIR}/${SRA_ID}_2.fastq.gz ${FASTQ_DIR}/${CELLRANGER_PREFIX}_S${SAMPLE_INDEX}_L001_R2_001.fastq.gz
 ```
 
-### 3. Alignment and UMI Processing
-The `CellRanger v8.0.1` software is used for sequence alignment, UMI recognition, and base-calling. This step processes the trimmed `.fastq.gz` files and aligns them to the `mm10` mouse reference genome. Results include gene-cell matrices and sequencing quality metrics.
+### 3. CellRanger Alignment and Processing
+
+After all FASTQ files are prepared and properly renamed, the `cellranger count` command is used to perform alignment, UMI processing, and generate gene-cell matrices.
 
 ```bash
-# Example CellRanger command
-cellranger count --id=SampleID --transcriptome=/path/to/reference --fastqs=/path/to/fastq_trimmed --sample=SampleName
+# Add CellRanger to PATH
+export PATH=$CELLRANGER_PATH:$PATH
+
+# Run CellRanger
+cellranger count \
+    --id=$ID \
+    --transcriptome=$REFERENCE_PATH \
+    --fastqs=$FASTQ_DIR \
+    --sample=$SAMPLE_NAME \
+    --localcores=10 \
+    --localmem=120 \
+    --create-bam true
 ```
+
 ## Script Information
 
-### `raw_reads_processing.sh`
-- **Purpose:** Automates downloading and preprocessing of raw sequencing reads using `SRA Toolkit` and `fastp`.
-- **Location:** `Data Preparation` folder.
-- **Input:** SRA identifiers.
-- **Output:** Trimmed FASTQ files and QC reports.
+### `data_preparation.bash`
 
-### `cellranger.sh`
-- **Purpose:** Automates alignment and UMI processing using `CellRanger`.
-- **Location:** `Data Preparation` folder.
-- **Input:** Trimmed FASTQ files.
-- **Output:** Aligned data with gene-cell matrices.
+- **Purpose:** Automates the downloading of raw sequencing reads from SRA, conversion to FASTQ format, renaming for consistency, and processing using CellRanger.
+- **Inputs:**
+  - **SRA Accession List:** A text file named `SRR_Acc_List_nash_w.txt` containing SRA IDs, one per line.
+  - **Reference Genome**
+- **Outputs:**
+  - **FASTQ Files:** Stored in `fastq_raw/nash_w`, renamed for CellRanger compatibility.
+  - **CellRanger Output:** filtered_feature_bc_matrix.h5 from CellRanger output.
+
 
 ## Notes
 - Ensure all dependencies (`SRA Toolkit`, `fastp`, `CellRanger`) are properly installed and configured in the environment.
