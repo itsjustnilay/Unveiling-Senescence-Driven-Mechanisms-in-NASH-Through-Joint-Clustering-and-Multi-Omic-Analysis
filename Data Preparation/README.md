@@ -1,9 +1,6 @@
 # Data Preparation
-
-## Overview
 This folder contains scripts and instructions for processing raw single-cell RNA sequencing (scRNA-seq) data from the study on senescence in normal and NASH-affected livers. The data processing pipeline begins with downloading raw sequencing files, followed by quality control, adapter trimming, and alignment to the reference genome.
 
-## Data Description
 The data for this project is sourced from the Gene Expression Omnibus (GEO) under accession number [GSE155182](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE155182). The raw sequencing files are associated with four samples:
 
 1. **Normal Liver - Whole (GSM4696914)**  
@@ -63,7 +60,7 @@ cellranger count \
 
 ## Script Information
 
-### `data_preparation.bash`
+### `data_preparation.sh`
 
 - **Purpose:** Automates the downloading of raw sequencing reads from SRA, conversion to FASTQ format, renaming for consistency, and processing using CellRanger.
 - **Inputs:**
