@@ -1,0 +1,243 @@
+---
+title: "multinichenet_interpretation_liver"
+output: html_document
+date: "2024-12-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(Seurat)
+library(Matrix)
+library(SingleCellExperiment)
+library(dplyr)
+library(ggplot2)
+library(nichenetr)
+library(multinichenetr)
+```
+
+```{r}
+multinichenet_output <- readRDS("multinichenet_output.rds")
+```
+
+# Visualization of differential cell-cell interactions
+
+## Summarizing ChordDiagram circos plots
+
+In a first instance, we will look at the broad overview of prioritized interactions via condition-specific Chordiagram circos plots. The aim of this visualizatin is to provide a summary of the top prioritized senderLigand-receiverReceptor interactions per condition (between all cell types or between cell type pairs of interest).
+
+```{r, fig.width=15, fig.height=10}
+prioritized_tbl_oi_all = get_top_n_lr_pairs(
+  multinichenet_output$prioritization_tables, 
+  top_n = 50, 
+  rank_per_group = FALSE
+  )
+
+prioritized_tbl_oi = 
+  multinichenet_output$prioritization_tables$group_prioritization_tbl %>%
+  filter(id %in% prioritized_tbl_oi_all$id) %>%
+  distinct(id, sender, receiver, ligand, receptor, group) %>% 
+  left_join(prioritized_tbl_oi_all)
+prioritized_tbl_oi$prioritization_score[is.na(prioritized_tbl_oi$prioritization_score)] = 0
+
+senders_receivers = union(prioritized_tbl_oi$sender %>% unique(), prioritized_tbl_oi$receiver %>% unique()) %>% sort()
+
+colors_sender = RColorBrewer::brewer.pal(n = length(senders_receivers), name = 'Spectral') %>% magrittr::set_names(senders_receivers)
+colors_receiver = RColorBrewer::brewer.pal(n = length(senders_receivers), name = 'Spectral') %>% magrittr::set_names(senders_receivers)
+
+circos_list = make_circos_group_comparison(prioritized_tbl_oi, colors_sender, colors_receiver)
+```
+
+## Interpretable bubble plots
+
+In the next type of plots, we visualize the following prioritization criteria used in MultiNicheNet:
+
+1. differential expression of ligand and receptor: the per-sample scaled product of normalized ligand and receptor pseudobulk expression
+2. the scaled ligand activities
+3. cell-type specificity of ligand and receptor.
+
+
+```{r,fig.width=15, fig.height=10}
+group_oi = "normal"
+
+prioritized_tbl_oi_M_50 = prioritized_tbl_oi_all %>% 
+  filter(group == group_oi)
+
+plot_oi = make_sample_lr_prod_activity_plots_Omnipath(
+  multinichenet_output$prioritization_tables, 
+  prioritized_tbl_oi_M_50 %>% inner_join(lr_network_all)
+  )
+
+plot_oi
+```
+
+```{r, fig.width=15, fig.height=10}
+group_oi = "nash"
+
+prioritized_tbl_oi_M_50 = prioritized_tbl_oi_all %>% 
+  filter(group == group_oi)
+
+plot_oi = make_sample_lr_prod_activity_plots_Omnipath(
+  multinichenet_output$prioritization_tables, 
+  prioritized_tbl_oi_M_50 %>% inner_join(lr_network_all)
+  )
+
+plot_oi
+```
+
+
+With Kupffer cells as recievers:
+
+```{r,fig.width=15, fig.height=10}
+group_oi = "nash"
+
+#reciever
+prioritized_tbl_oi_M_50 = get_top_n_lr_pairs(
+  multinichenet_output$prioritization_tables, 
+  50, 
+  groups_oi = group_oi, 
+  receivers_oi = "Kupffer.cells"
+  ) 
+plot_oi = make_sample_lr_prod_activity_plots_Omnipath(
+  multinichenet_output$prioritization_tables, 
+  prioritized_tbl_oi_M_50 %>% inner_join(lr_network_all)
+  )
+plot_oi
+
+
+
+#sender
+prioritized_tbl_oi_M_50 = get_top_n_lr_pairs(
+  multinichenet_output$prioritization_tables, 
+  50, 
+  groups_oi = group_oi, 
+  senders_oi = "Kupffer.cells")
+
+plot_oi = make_sample_lr_prod_activity_plots_Omnipath(
+  multinichenet_output$prioritization_tables, 
+  prioritized_tbl_oi_M_50 %>% inner_join(lr_network_all))
+plot_oi
+```
+
+
+
+### Visualize sender-agnostic ligand activities for each receiver-group combination
+
+e plot all the ligand activities (both scaled and absolute activities) of each receiver-condition combination. This can give us some insights in active signaling pathways across conditions. Note that we can thus show top ligands based on ligand activity - irrespective and agnostic of expression in sender. Benefits of this analysis are the possibility to infer the activity of ligands that are expressed by cell types that are not in your single-cell dataset or that are hard to pick up at the RNA level.
+
+The following block of code will show how to visualize the activities for the top5 ligands for each receiver cell type - condition combination:
+
+```{r,fig.width=15, fig.height=10}
+ligands_oi = multinichenet_output$prioritization_tables$ligand_activities_target_de_tbl %>% 
+  inner_join(contrast_tbl) %>% 
+  group_by(group, receiver) %>% filter(direction_regulation == "up") %>% 
+  distinct(ligand, receiver, group, activity) %>% 
+  top_n(5, activity) %>% 
+  pull(ligand) %>% unique()
+
+plot_oi = make_ligand_activity_plots(
+  multinichenet_output$prioritization_tables, 
+  ligands_oi, 
+  contrast_tbl,
+  widths = NULL)
+plot_oi
+```
+
+## Visualization of ligand-to-target signaling paths
+
+```{R}
+lr_target_prior = prioritized_tbl_oi_all %>% inner_join(
+        multinichenet_output$ligand_activities_targets_DEgenes$ligand_activities %>%
+          distinct(ligand, target, direction_regulation, contrast) %>% inner_join(contrast_tbl) %>% ungroup() 
+        ) 
+
+lr_target_df = lr_target_prior %>% distinct(group, sender, receiver, ligand, receptor, id, target, direction_regulation) 
+
+lr_target_df %>% filter(target %in% union(lr_network$ligand, lr_network$receptor))
+
+network = infer_intercellular_regulatory_network(lr_target_df, prioritized_tbl_oi_all)
+```
+
+
+```{r}
+if(organism == "human"){
+  sig_network = readRDS(url("https://zenodo.org/record/7074291/files/signaling_network_human_21122021.rds")) %>% 
+    mutate(from = make.names(from), to = make.names(to))
+  
+  gr_network = readRDS(url("https://zenodo.org/record/7074291/files/gr_network_human_21122021.rds")) %>% 
+    mutate(from = make.names(from), to = make.names(to))
+  
+  ligand_tf_matrix = readRDS(url("https://zenodo.org/record/7074291/files/ligand_tf_matrix_nsga2r_final.rds"))
+  colnames(ligand_tf_matrix) = colnames(ligand_tf_matrix) %>% make.names()
+  rownames(ligand_tf_matrix) = rownames(ligand_tf_matrix) %>% make.names()
+  
+  weighted_networks = readRDS(url("https://zenodo.org/record/7074291/files/weighted_networks_nsga2r_final.rds"))
+  weighted_networks$lr_sig = weighted_networks$lr_sig %>% mutate(from = make.names(from), to = make.names(to))
+  weighted_networks$gr = weighted_networks$gr %>% mutate(from = make.names(from), to = make.names(to))
+  
+} else if(organism == "mouse"){
+  sig_network = readRDS(url("https://zenodo.org/record/7074291/files/signaling_network_mouse_21122021.rds")) %>% 
+    mutate(from = make.names(from), to = make.names(to))
+  
+  gr_network = readRDS(url("https://zenodo.org/record/7074291/files/gr_network_mouse_21122021.rds")) %>% 
+    mutate(from = make.names(from), to = make.names(to))
+  
+  ligand_tf_matrix = readRDS(url("https://zenodo.org/record/7074291/files/ligand_tf_matrix_nsga2r_final_mouse.rds"))
+  colnames(ligand_tf_matrix) = colnames(ligand_tf_matrix) %>% make.names()
+  rownames(ligand_tf_matrix) = rownames(ligand_tf_matrix) %>% make.names()
+  
+  weighted_networks = readRDS(url("https://zenodo.org/record/7074291/files/weighted_networks_nsga2r_final_mouse.rds"))
+  weighted_networks$lr_sig = weighted_networks$lr_sig %>% mutate(from = make.names(from), to = make.names(to))
+  weighted_networks$gr = weighted_networks$gr %>% mutate(from = make.names(from), to = make.names(to))
+}
+```
+
+```{R,fig.width=15, fig.height=10}
+network$links %>% filter(sender_ligand == "Kupffer.cells_Ifng" & direction_regulation == "up" & group == "nash")
+
+ligand_oi = "Ifng"
+receptor_oi = "Ifngr1"
+targets_all = c("Ifng", "Ifngr1")
+  
+active_signaling_network = nichenetr::get_ligand_signaling_path_with_receptor(
+  ligand_tf_matrix = ligand_tf_matrix, 
+  ligands_all = ligand_oi, 
+  receptors_all = receptor_oi, 
+  targets_all = targets_all, 
+  weighted_networks = weighted_networks, 
+  top_n_regulators = 3
+  )
+
+data_source_network = nichenetr::infer_supporting_datasources(
+  signaling_graph_list = active_signaling_network,
+  lr_network = lr_network %>% dplyr::rename(from = ligand, to = receptor), 
+  sig_network = sig_network, 
+  gr_network = gr_network
+  )
+
+
+active_signaling_network_min_max = active_signaling_network
+active_signaling_network_min_max$sig = active_signaling_network_min_max$sig %>% mutate(weight = ((weight-min(weight))/(max(weight)-min(weight))) + 0.75)
+active_signaling_network_min_max$gr = active_signaling_network_min_max$gr %>% mutate(weight = ((weight-min(weight))/(max(weight)-min(weight))) + 0.75)
+colors = c("ligand" = "purple", "receptor" = "orange", "target" = "royalblue", "mediator" = "grey60")
+ggraph_signaling_path = make_ggraph_signaling_path(
+  active_signaling_network_min_max, 
+  colors, 
+  ligand_oi, 
+  receptor_oi, 
+  targets_all)
+ggraph_signaling_path$plot
+```
+
+```{r}
+data_source_network %>% head()
+```
+
+
+
+
+
+
+
