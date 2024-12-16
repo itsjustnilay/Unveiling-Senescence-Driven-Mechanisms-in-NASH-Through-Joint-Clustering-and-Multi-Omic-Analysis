@@ -1,0 +1,245 @@
+---
+title: "Multinichenet_interpretation"
+output: html_document
+date: "2024-12-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Libraries
+
+```{r}
+library(Seurat)
+library(Matrix)
+library(nichenetr) #install_github("saeyslab/nichenetr")
+library(multinichenetr) #install_github("saeyslab/multinichenetr")
+library(SingleCellExperiment)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+multinichenet_output <- readRDS("~/palmer_scratch/multinichenet_output.rds")
+```
+
+```{r}
+prioritized_tbl_oi_all = get_top_n_lr_pairs(
+  multinichenet_output$prioritization_tables, 
+  top_n = 50, 
+  rank_per_group = FALSE
+  )
+```
+
+```{r}
+prioritized_tbl_oi = 
+  multinichenet_output$prioritization_tables$group_prioritization_tbl %>%
+  filter(id %in% prioritized_tbl_oi_all$id) %>%
+  distinct(id, sender, receiver, ligand, receptor, group) %>% 
+  left_join(prioritized_tbl_oi_all)
+prioritized_tbl_oi$prioritization_score[is.na(prioritized_tbl_oi$prioritization_score)] = 0
+
+senders_receivers = union(prioritized_tbl_oi$sender %>% unique(), prioritized_tbl_oi$receiver %>% unique()) %>% sort()
+
+colors_sender = RColorBrewer::brewer.pal(n = length(senders_receivers), name = 'Spectral') %>% magrittr::set_names(senders_receivers)
+colors_receiver = RColorBrewer::brewer.pal(n = length(senders_receivers), name = 'Spectral') %>% magrittr::set_names(senders_receivers)
+
+circos_list = make_circos_group_comparison(prioritized_tbl_oi, colors_sender, colors_receiver)
+```
+
+```{r}
+group_oi = "normal"
+
+prioritized_tbl_oi_all = get_top_n_lr_pairs(
+  multinichenet_output$prioritization_tables, 
+  top_n = 50, 
+  rank_per_group = TRUE
+  )
+
+prioritized_tbl_oi_normal_50 = prioritized_tbl_oi_all %>% 
+  filter(group == group_oi) 
+```
+
+```{r}
+prioritized_tbl_oi = 
+  multinichenet_output$prioritization_tables$group_prioritization_tbl %>%
+  filter(id %in% prioritized_tbl_oi_normal_50$id) %>%
+  distinct(id, sender, receiver, ligand, receptor, group) %>% 
+  left_join(prioritized_tbl_oi_normal_50)
+prioritized_tbl_oi$prioritization_score[is.na(prioritized_tbl_oi$prioritization_score)] = 0
+
+senders_receivers = union(prioritized_tbl_oi$sender %>% unique(), prioritized_tbl_oi$receiver %>% unique()) %>% sort()
+
+colors_sender = RColorBrewer::brewer.pal(n = length(senders_receivers), name = 'Spectral') %>% magrittr::set_names(senders_receivers)
+colors_receiver = RColorBrewer::brewer.pal(n = length(senders_receivers), name = 'Spectral') %>% magrittr::set_names(senders_receivers)
+
+circos_list = make_circos_group_comparison(prioritized_tbl_oi, colors_sender, colors_receiver)
+```
+
+```{}
+```
+
+```{}
+```
+
+### Interpretable bubble plots
+
+```{r}
+#for nash group
+group_oi = "nash"
+
+prioritized_tbl_oi_nash_50 = prioritized_tbl_oi_all %>% 
+  filter(group == group_oi)
+```
+
+```{r, fig.width=15, fig.height=12}
+plot_oi = make_sample_lr_prod_activity_plots_Omnipath(
+  multinichenet_output$prioritization_tables, 
+  prioritized_tbl_oi_nash_50 %>% inner_join(lr_network_all)
+  )
+plot_oi
+```
+```{r}
+#for normal group
+group_oi = "normal"
+
+prioritized_tbl_oi_normal_50 = prioritized_tbl_oi_all %>% 
+  filter(group == group_oi)
+```
+
+```{r,fig.width=15, fig.height=12}
+plot_oi = make_sample_lr_prod_activity_plots_Omnipath(
+  multinichenet_output$prioritization_tables, 
+  prioritized_tbl_oi_normal_50 %>% inner_join(lr_network_all)
+  )
+plot_oi
+```
+
+Typically, there are way more than 50 differentially expressed and active ligand-receptor pairs per group across all sender-receiver combinations. Therefore it might be useful to zoom in on specific cell types as senders/receivers:
+
+```{r,fig.width=15, fig.height=12}
+#kupffer cells as receiver
+group_oi = "nash"
+prioritized_tbl_oi_nash_50 = get_top_n_lr_pairs(
+  multinichenet_output$prioritization_tables, 
+  50, 
+  groups_oi = group_oi, 
+  receivers_oi = "Kupffer.cells"
+  ) 
+
+plot_oi = make_sample_lr_prod_activity_plots_Omnipath(
+  multinichenet_output$prioritization_tables, 
+  prioritized_tbl_oi_nash_50 %>% inner_join(lr_network_all)
+  )
+plot_oi
+```
+```{r,fig.width=15, fig.height=12}
+#kupffer cells as sender
+group_oi = "nash"
+prioritized_tbl_oi_nash_50 = get_top_n_lr_pairs(
+  multinichenet_output$prioritization_tables, 
+  50, 
+  groups_oi = group_oi, 
+  senders_oi = "Kupffer.cells"
+  ) 
+
+plot_oi = make_sample_lr_prod_activity_plots_Omnipath(
+  multinichenet_output$prioritization_tables, 
+  prioritized_tbl_oi_nash_50 %>% inner_join(lr_network_all)
+  )
+plot_oi
+```
+
+## Visualize sender-agnostic ligand activities for each receiver-group combination
+```{r, fig.width=15, fig.height=14}
+ligands_oi = multinichenet_output$prioritization_tables$ligand_activities_target_de_tbl %>% 
+  inner_join(contrast_tbl) %>% 
+  group_by(group, receiver) %>% filter(direction_regulation == "up") %>% 
+  distinct(ligand, receiver, group, activity) %>% 
+  top_n(5, activity) %>% 
+  pull(ligand) %>% unique()
+
+plot_oi = make_ligand_activity_plots(
+  multinichenet_output$prioritization_tables, 
+  ligands_oi, 
+  contrast_tbl,
+  widths = NULL)
+plot_oi
+```
+
+### Visualization of ligand-to-target signaling paths
+```{r}
+if(organism == "human"){
+  sig_network = readRDS(url("https://zenodo.org/record/7074291/files/signaling_network_human_21122021.rds")) %>% 
+    mutate(from = make.names(from), to = make.names(to))
+  
+  gr_network = readRDS(url("https://zenodo.org/record/7074291/files/gr_network_human_21122021.rds")) %>% 
+    mutate(from = make.names(from), to = make.names(to))
+  
+  ligand_tf_matrix = readRDS(url("https://zenodo.org/record/7074291/files/ligand_tf_matrix_nsga2r_final.rds"))
+  colnames(ligand_tf_matrix) = colnames(ligand_tf_matrix) %>% make.names()
+  rownames(ligand_tf_matrix) = rownames(ligand_tf_matrix) %>% make.names()
+  
+  weighted_networks = readRDS(url("https://zenodo.org/record/7074291/files/weighted_networks_nsga2r_final.rds"))
+  weighted_networks$lr_sig = weighted_networks$lr_sig %>% mutate(from = make.names(from), to = make.names(to))
+  weighted_networks$gr = weighted_networks$gr %>% mutate(from = make.names(from), to = make.names(to))
+  
+} else if(organism == "mouse"){
+  sig_network = readRDS(url("https://zenodo.org/record/7074291/files/signaling_network_mouse_21122021.rds")) %>% 
+    mutate(from = make.names(from), to = make.names(to))
+  
+  gr_network = readRDS(url("https://zenodo.org/record/7074291/files/gr_network_mouse_21122021.rds")) %>% 
+    mutate(from = make.names(from), to = make.names(to))
+  
+  ligand_tf_matrix = readRDS(url("https://zenodo.org/record/7074291/files/ligand_tf_matrix_nsga2r_final_mouse.rds"))
+  colnames(ligand_tf_matrix) = colnames(ligand_tf_matrix) %>% make.names()
+  rownames(ligand_tf_matrix) = rownames(ligand_tf_matrix) %>% make.names()
+  
+  weighted_networks = readRDS(url("https://zenodo.org/record/7074291/files/weighted_networks_nsga2r_final_mouse.rds"))
+  weighted_networks$lr_sig = weighted_networks$lr_sig %>% mutate(from = make.names(from), to = make.names(to))
+  weighted_networks$gr = weighted_networks$gr %>% mutate(from = make.names(from), to = make.names(to))
+}
+```
+Define which ligand and target genes you want to focus on
+```{r}
+network$links %>% filter(sender_ligand == "Kupffer.cells_Ccl3" & direction_regulation == "up" & group == "nash")
+```
+```{r}
+ligand_oi = "Ccl3"
+receptor_oi = "Ccl3"
+targets_all = c("Ccl3", "Ccl3")
+  
+active_signaling_network = nichenetr::get_ligand_signaling_path_with_receptor(
+  ligand_tf_matrix = ligand_tf_matrix, 
+  ligands_all = ligand_oi, 
+  receptors_all = receptor_oi, 
+  targets_all = targets_all, 
+  weighted_networks = weighted_networks, 
+  top_n_regulators = 3
+  )
+
+data_source_network = nichenetr::infer_supporting_datasources(
+  signaling_graph_list = active_signaling_network,
+  lr_network = lr_network %>% dplyr::rename(from = ligand, to = receptor), 
+  sig_network = sig_network, 
+  gr_network = gr_network
+  )
+```
+
+```{r, fig.width=15}
+active_signaling_network_min_max = active_signaling_network
+active_signaling_network_min_max$sig = active_signaling_network_min_max$sig %>% mutate(weight = ((weight-min(weight))/(max(weight)-min(weight))) + 0.75)
+active_signaling_network_min_max$gr = active_signaling_network_min_max$gr %>% mutate(weight = ((weight-min(weight))/(max(weight)-min(weight))) + 0.75)
+colors = c("ligand" = "purple", "receptor" = "orange", "target" = "royalblue", "mediator" = "grey60")
+#ggraph_signaling_path = suppressWarnings(make_ggraph_signaling_path(active_signaling_network_min_max, colors, ligand_oi, receptor_oi, targets_all))
+ggraph_signaling_path = make_ggraph_signaling_path(
+  active_signaling_network_min_max, 
+  colors, 
+  ligand_oi, 
+  receptor_oi, 
+  targets_all)
+ggraph_signaling_path$plot
+```
+
+data_source_network %>% head()
